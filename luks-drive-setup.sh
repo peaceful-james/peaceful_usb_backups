@@ -168,7 +168,7 @@ if [[ -f "$CHEATSHEET" ]]; then
     echo "Writing cheat sheet to unencrypted partition..."
     PLAIN_MNT=$(mktemp -d)
     mount "$PART1" "$PLAIN_MNT"
-    cp "$CHEATSHEET" "$PLAIN_MNT/README.txt"
+    cp "$CHEATSHEET" "$PLAIN_MNT/PEACEFUL_BACKUP.txt"
     umount "$PLAIN_MNT"
     rmdir "$PLAIN_MNT"
 fi
