@@ -1,0 +1,10 @@
+.DS_Store
+.idea
+*.log
+tmp/
+
+# make your own backup conf
+backup.conf
+
+# ignore whatever you want
+.backupignore

@@ -1,0 +1,47 @@
+# backup.conf — what to back up and where to restore it
+#
+# Format:  source_path : category : restore_path
+#
+# - source_path:  relative to $HOME (what to back up)
+# - category:     subfolder name on the backup drive
+# - restore_path: relative to $HOME (where to restore to)
+#
+# Lines starting with # are comments. Blank lines are ignored.
+# Items that don't exist on a given machine are silently skipped.
+
+# ─── Peaceful USB backups ──────────────────────────────────────
+~/github/peaceful_usb_backups : peaceful_usb_backups : ~/github/peaceful_usb_backups
+
+# ─── Credentials & secrets ──────────────────────────────────────
+.ssh                : ssh     : .ssh
+.gnupg              : gpg     : .gnupg
+.password-store     : pass    : .password-store
+.authinfo.gpg       : emacs   : .authinfo.gpg
+
+# ─── Git ────────────────────────────────────────────────────────
+.gitconfig          : git     : .gitconfig
+
+# ─── Shell ──────────────────────────────────────────────────────
+.bashrc             : shell   : .bashrc
+.bash_profile       : shell   : .bash_profile
+.profile            : shell   : .profile
+.zshrc              : shell   : .zshrc
+.zshenv             : shell   : .zshenv
+
+# ─── Emacs ──────────────────────────────────────────────────────
+.emacs.d            : emacs   : .emacs.d
+.emacs              : emacs   : .emacs
+.config/emacs       : emacs   : .config/emacs
+
+# ─── Scripts ────────────────────────────────────────────────────
+bin                 : scripts : bin
+.local/bin          : scripts : .local/bin
+my-crazy-aliases    : scripts : my-crazy-aliases
+
+# ─── Uncomment to enable ────────────────────────────────────────
+# .git-credentials  : git     : .git-credentials
+# .tmux.conf        : tmux    : .tmux.conf
+# .vimrc            : vim     : .vimrc
+# .config/nvim      : vim     : .config/nvim
+# .aws              : cloud   : .aws
+# .kube/config      : cloud   : .kube/config
