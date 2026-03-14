@@ -16,6 +16,7 @@ SSH keys, GPG keys, shell configs, Emacs setups, personal scripts — these accu
 | `core-lib.sh` | Shared functions (LUKS helpers, machine ID, config parser) |
 | `backup.conf` | Single config file defining what to back up and where to restore it |
 | `.backupignore` | Patterns to exclude from backups (rsync syntax, works like `.gitignore`) |
+| `CHEATSHEET.txt` | Quick-reference for accessing backups from a bare terminal — copied to the unencrypted partition during drive setup |
 
 ## Quick start
 
@@ -140,6 +141,6 @@ The file is optional — if absent, nothing is excluded. Only affects backups, n
 
 - **Flash drive health**: USB drives degrade over time. Every year or two, verify both drives and consider replacing the physical media.
 - **Machine ID override**: set `BACKUP_HOST=myname` to use a custom identifier instead of the auto-generated one.
-- **All six files must live in the same directory.**
+- **All seven files must live in the same directory.**
 - The setup script refuses to format any device with active mount points, and warns if the device doesn't report USB transport.
 - The backup and restore scripts handle already-unlocked drives gracefully — no need to close and reopen.

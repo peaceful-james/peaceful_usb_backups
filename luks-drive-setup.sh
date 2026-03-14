@@ -15,6 +15,7 @@ set -euo pipefail
 #   sudo ./luks-drive-setup.sh /dev/sdb        # 20% encrypted, 80% open
 #   sudo ./luks-drive-setup.sh /dev/sdb 30     # 30% encrypted, 70% open
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEVICE="${1:-}"
 BACKUP_PCT="${2:-20}"
 OPEN_PCT=$(( 100 - BACKUP_PCT ))
@@ -160,6 +161,17 @@ umount "$SETUP_MNT"
 rmdir "$SETUP_MNT"
 
 cryptsetup luksClose backup_setup
+
+# Copy cheat sheet to the unencrypted partition
+CHEATSHEET="$SCRIPT_DIR/CHEATSHEET.txt"
+if [[ -f "$CHEATSHEET" ]]; then
+    echo "Writing cheat sheet to unencrypted partition..."
+    PLAIN_MNT=$(mktemp -d)
+    mount "$PART1" "$PLAIN_MNT"
+    cp "$CHEATSHEET" "$PLAIN_MNT/README.txt"
+    umount "$PLAIN_MNT"
+    rmdir "$PLAIN_MNT"
+fi
 
 echo ""
 echo "============================================"

@@ -1,0 +1,47 @@
+═══════════════════════════════════════════════════
+  ENCRYPTED BACKUP DRIVE — QUICK REFERENCE
+═══════════════════════════════════════════════════
+
+This drive has two partitions:
+
+  1. PLAINVIEW  (this one) — unencrypted, daily use
+  2. PEACEFUL_BACKUP       — LUKS-encrypted backups
+
+To access your backups from a bare terminal:
+
+  # 1. Find the encrypted partition
+  lsblk
+  #    Look for the LUKS partition (usually the smaller one)
+
+  # 2. Decrypt it
+  sudo cryptsetup luksOpen /dev/sdX2 peaceful_backup
+  #    (replace sdX2 with your actual partition)
+
+  # 3. Mount it
+  sudo mkdir -p /mnt/peaceful_backup
+  sudo mount /dev/mapper/peaceful_backup /mnt/peaceful_backup
+
+  # 4. Browse your backups
+  ls /mnt/peaceful_backup/
+  #    Each machine has its own directory.
+  #    Inside: ssh/, gpg/, shell/, emacs/, scripts/, etc.
+
+  # 5. Copy what you need, e.g.
+  cp -r /mnt/peaceful_backup/mythinkpad-0036232/ssh/.ssh ~/
+  cp    /mnt/peaceful_backup/mythinkpad-0036232/shell/.bashrc ~/
+
+  # 6. When done, close up
+  sudo umount /mnt/peaceful_backup
+  sudo cryptsetup luksClose peaceful_backup
+
+If you have the backup scripts, you can instead run:
+
+  ./restore-from-usb.sh
+
+Prerequisites (install if missing):
+
+  sudo apt install cryptsetup        # Debian/Ubuntu
+  sudo pacman -S cryptsetup          # Arch
+  sudo dnf install cryptsetup        # Fedora
+
+═══════════════════════════════════════════════════
