@@ -129,7 +129,8 @@ sgdisk --zap-all "$DEVICE"
 echo "[2/5] Creating partitions (${OPEN_PCT}% / ${BACKUP_PCT}% split)..."
 
 # sgdisk doesn't support %, so calculate the size ourselves
-TOTAL_SECTORS=$(sgdisk -p "$DEVICE" 2>/dev/null | awk '/^Disk.*sectors/{print $3}')
+SECTOR_SIZE=$(blockdev --getss "$DEVICE")
+TOTAL_SECTORS=$(( $(blockdev --getsize64 "$DEVICE") / SECTOR_SIZE ))
 PART1_SECTORS=$(( TOTAL_SECTORS * OPEN_PCT / 100 ))
 
 sgdisk -n "1:0:+${PART1_SECTORS}" -t 1:0700 "$DEVICE"    # 0700 = Microsoft basic data (exFAT)
@@ -167,9 +168,23 @@ CHEATSHEET="$SCRIPT_DIR/CHEATSHEET.txt"
 if [[ -f "$CHEATSHEET" ]]; then
     echo "Writing cheat sheet to unencrypted partition..."
     PLAIN_MNT=$(mktemp -d)
-    mount "$PART1" "$PLAIN_MNT"
-    cp "$CHEATSHEET" "$PLAIN_MNT/PEACEFUL_BACKUP.txt"
-    umount "$PLAIN_MNT"
+    # The kernel may not have registered the new exFAT filesystem yet
+    MOUNT_OK=false
+    for attempt in 1 2 3 4 5; do
+        if mount "$PART1" "$PLAIN_MNT" 2>/dev/null; then
+            MOUNT_OK=true
+            break
+        fi
+        echo "  Waiting for partition to become ready... (attempt $attempt)"
+        sleep 2
+    done
+    if $MOUNT_OK; then
+        cp "$CHEATSHEET" "$PLAIN_MNT/PEACEFUL_BACKUP.txt"
+        umount "$PLAIN_MNT"
+    else
+        echo "  Warning: could not mount $PART1 — skipping cheat sheet copy."
+        echo "  You can manually copy CHEATSHEET.txt onto PLAINVIEW later."
+    fi
     rmdir "$PLAIN_MNT"
 fi
 
