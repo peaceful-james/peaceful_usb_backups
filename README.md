@@ -41,6 +41,7 @@ If the USB is borked somehow, you might need to do this:
 ```
 sudo sgdisk --zap-all /dev/sdX
 sudo partprobe /dev/sdX
+sudo wipefs -a /dev/sdX
 ```
 
 ### 2. Edit the config
