@@ -22,21 +22,26 @@ DRY_RUN=""
 LIST_ONLY=false
 FROM_MACHINE=""
 
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --dry-run)  DRY_RUN="--dry-run"; shift ;;
-        --list)     LIST_ONLY=true; shift ;;
-        --from)     FROM_MACHINE="$2"; shift 2 ;;
-        *)          echo "Unknown option: $1"; exit 1 ;;
-    esac
-done
+# Parsed inside a function so the script's own "$@" stays intact:
+# ensure_root re-runs the script under sudo and must pass the same options on.
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --dry-run)  DRY_RUN="--dry-run"; shift ;;
+            --list)     LIST_ONLY=true; shift ;;
+            --from)     FROM_MACHINE="$2"; shift 2 ;;
+            *)          echo "Unknown option: $1"; exit 1 ;;
+        esac
+    done
+}
+parse_args "$@"
+
+ensure_root "$@"
 
 if [[ -n "$DRY_RUN" ]]; then
     echo "*** DRY RUN — no files will be changed ***"
     echo ""
 fi
-
-ensure_root
 
 if [[ -n "${SUDO_USER:-}" ]]; then
     REAL_HOME=$(eval echo "~$SUDO_USER")
@@ -172,7 +177,9 @@ elif [[ "$CAT_CHOICE" == "a" ]]; then
     RESTORE_CATS=("${CATEGORIES[@]}")
 else
     IFS=',' read -ra PICKS <<< "$CAT_CHOICE"
-    for pick in "${PICKS[@]}"; do
+    # PICKS is empty if you just press Enter. Before bash 4.4, expanding an
+    # empty array is an error under "set -u", hence the ${PICKS[@]+...} form.
+    for pick in ${PICKS[@]+"${PICKS[@]}"}; do
         pick=$(echo "$pick" | tr -d ' ')
         if [[ "$pick" =~ ^[0-9]+$ ]] && (( pick >= 1 && pick <= ${#CATEGORIES[@]} )); then
             RESTORE_CATS+=("${CATEGORIES[$((pick-1))]}")
