@@ -177,7 +177,9 @@ elif [[ "$CAT_CHOICE" == "a" ]]; then
     RESTORE_CATS=("${CATEGORIES[@]}")
 else
     IFS=',' read -ra PICKS <<< "$CAT_CHOICE"
-    for pick in "${PICKS[@]}"; do
+    # PICKS is empty if you just press Enter. Before bash 4.4, expanding an
+    # empty array is an error under "set -u", hence the ${PICKS[@]+...} form.
+    for pick in ${PICKS[@]+"${PICKS[@]}"}; do
         pick=$(echo "$pick" | tr -d ' ')
         if [[ "$pick" =~ ^[0-9]+$ ]] && (( pick >= 1 && pick <= ${#CATEGORIES[@]} )); then
             RESTORE_CATS+=("${CATEGORIES[$((pick-1))]}")
