@@ -51,6 +51,73 @@ load_config() {
     fi
 }
 
+# ─── Where the drive lives ──────────────────────────────────────
+# On Linux the drive is mounted locally, so these hooks are trivial.
+# On macOS the drive is mounted inside a small Linux VM, and
+# core-lib-macos.sh (sourced at the end of this file) replaces them.
+#
+#   on_drive CMD...    run CMD where the drive is mounted
+#   drive_path PATH    how rsync must address PATH on the drive
+#   RSYNC[]            the rsync command line, up to and including -a
+#   pull_file SRC DST  copy one file from the drive to DST
+#   list_devices       what to show when no drive is found
+
+on_drive()     { "$@"; }
+drive_path()   { printf '%s\n' "$1"; }
+RSYNC=(rsync -a)
+pull_file()    { cp -a "$1" "$2"; }
+list_devices() { lsblk -o NAME,SIZE,TYPE,MOUNTPOINT; }
+
+# drive_subdirs DIR — names of DIR's subdirectories on the drive, one per line
+drive_subdirs() {
+    on_drive bash -c '
+        cd "$1" || exit 1
+        for d in */; do
+            if [[ -d "$d" ]]; then printf "%s\n" "${d%/}"; fi
+        done
+    ' bash "$1"
+}
+
+# load_machines — fills MACHINES[] and MACHINE_LAST[] (parallel arrays)
+# with every machine on the drive and the date of its last backup.
+load_machines() {
+    MACHINES=()
+    MACHINE_LAST=()
+    local names name i
+
+    names=$(drive_subdirs "$MOUNT_POINT") || return 1
+    while IFS= read -r name; do
+        if [[ -n "$name" && "$name" != "lost+found" ]]; then
+            MACHINES+=("$name")
+        fi
+    done <<< "$names"
+
+    for ((i = 0; i < ${#MACHINES[@]}; i++)); do
+        MACHINE_LAST[$i]=$(on_drive head -1 "$MOUNT_POINT/${MACHINES[$i]}/MANIFEST.txt" 2>/dev/null \
+                           | sed 's/Last backup: //') || MACHINE_LAST[$i]=""
+    done
+    return 0
+}
+
+# print_machines THIS [numbered] — list the machines found by load_machines,
+# marking the one called THIS. With "numbered", as a menu.
+print_machines() {
+    local this="$1" numbered="${2:-}" i lead marker
+
+    for ((i = 0; i < ${#MACHINES[@]}; i++)); do
+        if [[ -n "$numbered" ]]; then
+            lead="  $((i+1))) "
+            marker="  ← this machine"
+        else
+            lead="    "
+            marker=" ← this machine"
+        fi
+        if [[ "${MACHINES[$i]}" != "$this" ]]; then marker=""; fi
+        echo "$lead${MACHINES[$i]}  (last: ${MACHINE_LAST[$i]:-unknown})$marker"
+    done
+    return 0
+}
+
 # ─── Machine ID ─────────────────────────────────────────────────
 # Produces a stable, human-readable identifier like "thinkpad-0036232"
 # by combining the hostname with a MAC-derived suffix to avoid collisions.
@@ -171,3 +238,12 @@ ensure_root() {
         exec sudo --preserve-env=BACKUP_HOST bash "$0" "$@"
     fi
 }
+
+# ─── macOS ───────────────────────────────────────────────────────
+# Replaces the hooks and the LUKS helpers above with versions that go
+# through a Linux helper VM. (An "if", not "[[ ]] &&": a false test on the
+# last line would make "source" fail and stop the calling script.)
+
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    source "$SCRIPT_DIR/core-lib-macos.sh"
+fi

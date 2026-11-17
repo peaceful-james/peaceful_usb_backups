@@ -25,8 +25,9 @@ plain: true
 mounts: []
 
 cpus: 2
-# Unlocking LUKS2 (argon2id) needs about 1 GiB on its own.
-memory: 2GiB
+# Unlocking LUKS2 (argon2id) takes up to 1 GiB, and cryptsetup warns unless
+# twice that is free. 2 GiB is not enough for that; 3 GiB is.
+memory: 3GiB
 disk: 10GiB
 
 # Runs on every boot, so it exits early once the tools are installed.

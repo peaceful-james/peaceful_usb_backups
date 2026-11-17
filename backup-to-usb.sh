@@ -45,7 +45,7 @@ LUKS_PART=$(find_luks_partition) || {
     echo "Error: No LUKS device found. Is the USB drive plugged in?"
     echo ""
     echo "Available devices:"
-    lsblk -o NAME,SIZE,TYPE,MOUNTPOINT
+    list_devices
     exit 1
 }
 
@@ -53,9 +53,11 @@ echo "Using: $LUKS_PART"
 open_and_mount "$LUKS_PART"
 
 # ─── Sync files ─────────────────────────────────────────────────
+# Anything that touches the drive goes through on_drive / drive_path
+# (see core-lib.sh), so the same code works when the drive is in a VM.
 
 MACHINE_DIR="$MOUNT_POINT/$HOST_ID"
-mkdir -p "$MACHINE_DIR"
+on_drive mkdir -p "$MACHINE_DIR"
 
 echo "Machine:  $HOST_ID"
 echo "Backing up to: $HOST_ID/"
@@ -82,31 +84,35 @@ for i in "${!CONF_SOURCES[@]}"; do
     fi
 
     DEST_PATH="$MACHINE_DIR/$DEST_SUB/"
-    mkdir -p "$DEST_PATH"
+    on_drive mkdir -p "$DEST_PATH"
 
     echo "  $SRC_REL → $HOST_ID/$DEST_SUB/"
 
     if [[ -d "$SRC_PATH" ]]; then
-        rsync -a --delete $EXCLUDE_ARG $DRY_RUN "$SRC_PATH/" "$DEST_PATH/$(basename "$SRC_PATH")/"
+        "${RSYNC[@]}" --delete ${EXCLUDE_ARG:+"$EXCLUDE_ARG"} $DRY_RUN \
+            "$SRC_PATH/" "$(drive_path "$DEST_PATH/$(basename "$SRC_PATH")/")"
     else
-        rsync -a $DRY_RUN "$SRC_PATH" "$DEST_PATH"
+        "${RSYNC[@]}" $DRY_RUN "$SRC_PATH" "$(drive_path "$DEST_PATH")"
     fi
 
     ((SYNCED++)) || true
 done
 
-# Write a per-machine manifest
+# Write a per-machine manifest (built where the drive is mounted)
 if [[ -z "$DRY_RUN" ]]; then
-    {
-        echo "Last backup: $TIMESTAMP"
-        echo "Machine:     $HOST_ID"
-        echo "User:        ${SUDO_USER:-$USER}"
-        echo ""
-        echo "Contents:"
-        find "$MACHINE_DIR" -not -path '*/lost+found/*' \
-             -not -name 'MANIFEST.txt' -type f | \
-             sed "s|$MACHINE_DIR/||" | sort
-    } > "$MACHINE_DIR/MANIFEST.txt"
+    on_drive bash -c '
+        set -eo pipefail
+        cd "$1"
+        {
+            echo "Last backup: $2"
+            echo "Machine:     $3"
+            echo "User:        $4"
+            echo ""
+            echo "Contents:"
+            find . -not -path "*/lost+found/*" -not -name MANIFEST.txt -type f \
+                | sed "s|^\./||" | sort
+        } > MANIFEST.txt
+    ' bash "$MACHINE_DIR" "$TIMESTAMP" "$HOST_ID" "${SUDO_USER:-$USER}"
 fi
 
 echo ""
@@ -116,26 +122,16 @@ echo "  Synced:  $SYNCED items"
 echo "  Skipped: $SKIPPED (not found)"
 
 if [[ -z "$DRY_RUN" ]]; then
-    USED=$(df -h "$MOUNT_POINT" | awk 'NR==2{print $3}')
-    AVAIL=$(df -h "$MOUNT_POINT" | awk 'NR==2{print $4}')
+    USED=$(on_drive df -h "$MOUNT_POINT" | awk 'NR==2{print $3}')
+    AVAIL=$(on_drive df -h "$MOUNT_POINT" | awk 'NR==2{print $4}')
     echo "  Used:    $USED"
     echo "  Free:    $AVAIL"
 
     # Show all machines on this drive
     echo ""
     echo "  All machines on this drive:"
-    for dir in "$MOUNT_POINT"/*/; do
-        [[ -d "$dir" ]] || continue
-        name=$(basename "$dir")
-        [[ "$name" == "lost+found" ]] && continue
-        last=""
-        if [[ -f "$dir/MANIFEST.txt" ]]; then
-            last=$(head -1 "$dir/MANIFEST.txt" | sed 's/Last backup: //')
-        fi
-        marker=""
-        [[ "$name" == "$HOST_ID" ]] && marker=" ← this machine"
-        echo "    $name  (last: ${last:-unknown})$marker"
-    done
+    load_machines
+    print_machines "$HOST_ID"
 fi
 
 echo "────────────────────────────────"
