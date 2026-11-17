@@ -50,6 +50,15 @@ else
 fi
 REAL_USER="${SUDO_USER:-$USER}"
 
+# Hand restored files back to the real user. Only needed when running as
+# root (Linux). On macOS the script runs as you, so the files are already
+# yours, and there is no group named after the user to chown to.
+restore_owner() {
+    if [[ $EUID -eq 0 ]]; then
+        chown -R "$REAL_USER:$REAL_USER" "$1"
+    fi
+}
+
 load_config
 
 trap cleanup_mount EXIT
@@ -62,7 +71,7 @@ LUKS_PART=$(find_luks_partition) || {
     echo "Error: No LUKS device found. Is the USB drive plugged in?"
     echo ""
     echo "Available devices:"
-    lsblk -o NAME,SIZE,TYPE,MOUNTPOINT
+    list_devices
     exit 1
 }
 
@@ -70,14 +79,10 @@ echo "Using: $LUKS_PART"
 open_and_mount "$LUKS_PART"
 
 # ─── Discover available machines ────────────────────────────────
+# Anything that touches the drive goes through on_drive / drive_path
+# (see core-lib.sh), so the same code works when the drive is in a VM.
 
-MACHINES=()
-for dir in "$MOUNT_POINT"/*/; do
-    [[ -d "$dir" ]] || continue
-    name=$(basename "$dir")
-    [[ "$name" == "lost+found" ]] && continue
-    MACHINES+=("$name")
-done
+load_machines
 
 if [[ ${#MACHINES[@]} -eq 0 ]]; then
     echo "No machine backups found on this drive."
@@ -88,16 +93,7 @@ THIS_MACHINE="$(machine_id)"
 
 echo "Available machine backups:"
 echo ""
-for i in "${!MACHINES[@]}"; do
-    name="${MACHINES[$i]}"
-    last=""
-    if [[ -f "$MOUNT_POINT/$name/MANIFEST.txt" ]]; then
-        last=$(head -1 "$MOUNT_POINT/$name/MANIFEST.txt" | sed 's/Last backup: //')
-    fi
-    marker=""
-    [[ "$name" == "$THIS_MACHINE" ]] && marker="  ← this machine"
-    echo "  $((i+1))) $name  (last: ${last:-unknown})$marker"
-done
+print_machines "$THIS_MACHINE" numbered
 echo ""
 
 if $LIST_ONLY; then
@@ -146,11 +142,10 @@ echo ""
 
 # Discover the backup categories (top-level subdirectories)
 CATEGORIES=()
-for dir in "$SOURCE_DIR"/*/; do
-    [[ -d "$dir" ]] || continue
-    name=$(basename "$dir")
-    CATEGORIES+=("$name")
-done
+CAT_NAMES=$(drive_subdirs "$SOURCE_DIR")
+while IFS= read -r name; do
+    if [[ -n "$name" ]]; then CATEGORIES+=("$name"); fi
+done <<< "$CAT_NAMES"
 
 if [[ ${#CATEGORIES[@]} -eq 0 ]]; then
     echo "No backup data found in $SELECTED."
@@ -160,7 +155,7 @@ fi
 echo "Available categories:"
 for i in "${!CATEGORIES[@]}"; do
     cat="${CATEGORIES[$i]}"
-    count=$(find "$SOURCE_DIR/$cat" -type f | wc -l)
+    count=$(on_drive find "$SOURCE_DIR/$cat" -type f | wc -l | tr -d ' ')
     echo "  $((i+1))) $cat ($count files)"
 done
 echo "  a) all"
@@ -231,7 +226,7 @@ for cat in "${RESTORE_CATS[@]}"; do
         # and files as category/basename
         DRIVE_PATH="$SOURCE_DIR/$cat/$BASENAME"
 
-        if [[ ! -e "$DRIVE_PATH" ]]; then
+        if ! on_drive test -e "$DRIVE_PATH"; then
             continue
         fi
 
@@ -239,7 +234,7 @@ for cat in "${RESTORE_CATS[@]}"; do
 
         echo "    $cat/$BASENAME → ~/$RESTORE_REL"
 
-        if [[ -d "$DRIVE_PATH" ]]; then
+        if on_drive test -d "$DRIVE_PATH"; then
             # Back up existing directory
             if [[ -e "$DEST_PATH" && -z "$DRY_RUN" ]]; then
                 mkdir -p "$(dirname "$SAFETY_DIR/$RESTORE_REL")"
@@ -248,8 +243,8 @@ for cat in "${RESTORE_CATS[@]}"; do
 
             if [[ -z "$DRY_RUN" ]]; then
                 mkdir -p "$DEST_PATH"
-                rsync -a --delete "$DRIVE_PATH/" "$DEST_PATH/"
-                chown -R "$REAL_USER:$REAL_USER" "$DEST_PATH"
+                "${RSYNC[@]}" --delete "$(drive_path "$DRIVE_PATH/")" "$DEST_PATH/"
+                restore_owner "$DEST_PATH"
             fi
             ((RESTORED++)) || true
         else
@@ -261,8 +256,8 @@ for cat in "${RESTORE_CATS[@]}"; do
 
             if [[ -z "$DRY_RUN" ]]; then
                 mkdir -p "$(dirname "$DEST_PATH")"
-                cp -a "$DRIVE_PATH" "$DEST_PATH"
-                chown "$REAL_USER:$REAL_USER" "$DEST_PATH"
+                pull_file "$DRIVE_PATH" "$DEST_PATH"
+                restore_owner "$DEST_PATH"
             fi
             ((RESTORED++)) || true
         fi
