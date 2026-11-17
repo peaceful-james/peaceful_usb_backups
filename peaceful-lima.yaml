@@ -1,0 +1,44 @@
+# peaceful-lima.yaml — the Linux helper VM used on macOS
+#
+# macOS cannot read LUKS or ext4, so on a Mac the backup scripts start this
+# small Linux VM (via Lima), hand it the encrypted partition, and talk to it
+# over SSH. You never need to use this file directly: the scripts create the
+# VM from it on first run.
+#
+# The VM gets exactly one thing from the Mac: the encrypted partition
+# (set per run as "blockDevices"). It has no shared folders, so it never
+# sees your files; the scripts push and pull them with rsync over SSH.
+#
+# Requires Lima 2.3 or newer (host block devices) and macOS 14 or newer.
+
+minimumLimaVersion: 2.3.0
+
+# Images only. The stock templates also add "_default/mounts", which shares
+# your home folder with the VM. That is deliberately left out here.
+base:
+- template:_images/debian-13
+
+vmType: vz
+
+# Plain mode: no shared folders, no port forwarding, no guest agent.
+plain: true
+mounts: []
+
+cpus: 2
+# Unlocking LUKS2 (argon2id) needs about 1 GiB on its own.
+memory: 2GiB
+disk: 10GiB
+
+# Runs on every boot, so it exits early once the tools are installed.
+# The first boot needs internet access.
+provision:
+- mode: system
+  script: |
+    #!/bin/sh
+    set -eu
+    if command -v cryptsetup >/dev/null 2>&1 && command -v rsync >/dev/null 2>&1; then
+        exit 0
+    fi
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends cryptsetup-bin rsync
